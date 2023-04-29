@@ -1,6 +1,6 @@
 {
     "manifest_version": 3,
-    "name": "Hello",
+    "name": "Shopping",
     "description": "Bridging the gap between theory and practice.",
     "version": "0.0.1",
     "action": {

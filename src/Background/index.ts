@@ -12,7 +12,7 @@ browser.runtime.onInstalled.addListener(function () {
 // 创建右键菜单
 browser.contextMenus.create({
     id: "1",
-    title: "hello",
+    title: "Shopping",
     contexts: ["selection", "page"],
 },
     () => {

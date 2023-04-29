@@ -7,7 +7,7 @@ import { PopupCard } from "./PopupCard"
 
 import { StyleProvider } from '@ant-design/cssinjs';
 
-const APP_NAME = '__jiang-test'
+const APP_NAME = '__jiang-shopping'
 
 // 初始化主容器，主容器用来挂在全局样式，包括第三方组件的样式
 let MyBox: HTMLElement | null = document.getElementById(APP_NAME);
@@ -40,7 +40,7 @@ style.textContent = `
   #LearningEnglish2023 {
     font-family: sans-serif;
     width: 400px;
-    height: 500px;
+    height: 100px;
     color: #333;
     position: fixed;
     display: flex;
@@ -51,6 +51,15 @@ style.textContent = `
     overflow: hidden;
     box-shadow: 2px 4px 16px rgba(0, 0, 0, 0.1), -1px 10px 10px rgba(0, 0, 0, 0.06);
     border-radius: 4px;
+    }
+
+    .hightlightBox{
+
+      background-color: red;
+      opacity: 0.5;
+      position: absolute;
+      z-index: 9999;
+  
     }
 
     #LearningEnglish2023 #ScouterNav {
@@ -100,7 +109,7 @@ browser.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
 
     // 显示窗口，window.getSelection() 是当前鼠标选中的区域信息
     console.log(window.getSelection());
-    
+
     showPopupCard(window.getSelection(), container, shadowRoot)
 
     // 监听页面点击事件
@@ -110,7 +119,7 @@ browser.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
         // 如果点击的不是插件窗口及其子元素，则关闭窗口
         if (MyBox !== event.target && !MyBox.contains(event.target as Node)) {
           // 隐藏窗口
-          container.parentNode?.removeChild(container);
+          // container.parentNode?.removeChild(container);
         }
       }
     }
