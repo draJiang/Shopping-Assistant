@@ -17,10 +17,14 @@ export function PopupCard(props: any) {
 
   const windowElement = useRef<HTMLDivElement>(null);
 
-  const ocrResult = useRef<Array<{ data: { data: { text: string, lines: { text: string, bbox: { x0: number, x1: number, y0: number, y1: number } }[] } }; image: string }[]>>([]);
-
-  const [searchResult, setSearchResult] = useState<Array<{ data: { data: object }, image: string, bbox: { x0: number, x1: number, y0: number, y1: number } }>>([]);
+  // 保存 OCR 识别的结果，用于后续的搜索
+  const ocrResult = useRef<Array<{ lines: Array<{ bbox: { x0: number, x1: number, y0: number, y1: number }, text: string }>, image: string }>>([]);
+  // 保存搜索结果
+  const [searchResult, setSearchResult] = useState<Array<{ text: string; image: string, bbox: { x0: number, x1: number, y0: number, y1: number } }>>([]);
+  // 保存搜索结果中，当前定位到哪个位置
   const [index, setIndex] = useState<number>(0)
+
+  const [searchStatus, setSearchStatus] = useState('stanby')
 
   useEffect(() => {
 
@@ -52,7 +56,20 @@ export function PopupCard(props: any) {
 
     console.log('chulitupian==========');
 
+    // 记录当前的位置
+    const y = window.scrollY; // 或者使用 window.pageYOffset
 
+    // 滚动到页面底部以让图片加载出来
+    window.scrollTo(0, document.body.scrollHeight / 2);
+
+    // 回到滚动前的位置
+    setTimeout(() => {
+      window.scrollTo(0, y);
+    }, 2000);
+
+
+
+    // 获取页面上需要 OCR 的图片
     let imageNode = document.getElementById('J-detail-content')?.getElementsByTagName('img')
     let imageList = new Array()
     if (imageNode !== undefined) {
@@ -61,78 +78,40 @@ export function PopupCard(props: any) {
 
       for (let i = imageNode?.length - 1; i > -1; i--) {
         let url: string = imageNode[i]['currentSrc'].replace('.avif', '')
+
         if (imageNode[i]['currentSrc'].indexOf('.gif') < 0) {
 
-          // 去噪点
-          // denoiseImage(url, 10).then((denoisedImageUrl) => {
-          //   imageList.push(denoisedImageUrl)
-          // })
-
-          // imageList.push(url)
-
-          // 预处理图片
-          // scaleImage(url, 1).then((scaledImageUrl) => {
-
-          //   imageList.push(scaledImageUrl)
-
-          //   // // 去噪点
-          //   // denoiseImage(scaledImageUrl, 10).then((denoisedImageUrl) => {
-          //   //   imageList.push(denoisedImageUrl)
-          //   // })
-
-
-          // })
-
         } else {
-          url = 'https:' + imageNode[i].getAttribute('data-lazyload')?.replace('.avif', '')
-          // imageList.push(url)
+          let linkHeard = ''
+          let lazyload = imageNode[i].getAttribute('data-lazyload')
+          if (lazyload) {
+            if (lazyload.indexOf('http') < 0) {
+              linkHeard = 'https:'
+            }
+          }
+
+          url = linkHeard + imageNode[i].getAttribute('data-lazyload')?.replace('.avif', '')
+
         }
-
-        // // 加载图片
-        // const image = new Image();
-        // image.crossOrigin = "anonymous";
-        // image.src = url;
-        // const canvas = document.createElement('canvas');
-        // image.onload = () => {
-
-        //   // 将图片加载到canvas中
-
-        //   const ctx = canvas.getContext('2d');
-
-        //   if (ctx !== null && canvas.width !== 0) {
-        //     canvas.width = image.width;
-        //     canvas.height = image.height;
-        //     ctx.drawImage(image, 0, 0);
-
-        //     // 获取图片数据
-        //     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-        //     // 对图片进行二值化处理
-        //     binarizeImage(imageData, 128);
-
-        //     // 将处理后的图片数据写回canvas
-        //     ctx.putImageData(imageData, 0, 0);
-
-        //   }
-        // }
 
         imageList.push(url)
 
-
-
-        // imageList.forEach(imageUrl => {
-        //   imageOcr(imageUrl).then((text) => {
-        //     console.log(text);
-
-        //   })
-        // })
-
-        // testtt()
-
       }
 
-      // OCR 图片
-      imageOcr(imageList)
+      // 获取 OCR 结果的历史记录
+      getOCRHistory(imageList).then((data: any) => {
+        if (data) {
+          // 当前页面中的图片的 OCR 结果在本地记录中找到了，则直接用历史记录的数据
+          ocrResult.current = data
+
+        } else {
+          // OCR 图片
+          imageOcr(imageList)
+        }
+      })
+
+
+
     }
 
   }, [props]);
@@ -149,13 +128,15 @@ export function PopupCard(props: any) {
     };
   }, [dragging]);
 
-
+  // 搜索完毕后触发
   useEffect(() => {
 
+    setSearchStatus('end')
+
+    // 搜索完毕后，定位到第一个搜索结果
     if (searchResult.length > 0) {
       goToImage(searchResult[0])
     }
-
 
   }, [searchResult]);
 
@@ -171,6 +152,14 @@ export function PopupCard(props: any) {
     return imageData;
   }
 
+  const handleInputOnKeyDown = (event: any) => {
+    console.log('handleInputOnKeyDown');
+
+    // event.preventDefault()
+    event.stopPropagation()
+  }
+
+  // 通过图片的 URL 获取对应的图片 DOM 链接
   const findNode = (imageUrl: string) => {
     const imageNode = document.getElementById('J-detail-content')?.getElementsByTagName('img')
     if (imageNode !== undefined) {
@@ -196,7 +185,8 @@ export function PopupCard(props: any) {
     }
   }
 
-  function getElementTop(elem: any) {
+  // 获取指定 DOM 元素在整个页面中的 Y 坐标
+  const getElementTop = (elem: any) => {
     let top = 0;
     while (elem) {
       top += elem.offsetTop;
@@ -205,7 +195,8 @@ export function PopupCard(props: any) {
     return top;
   }
 
-  function getElementLeft(elem: any) {
+  // 获取指定 DOM 元素在整个页面中的 X 坐标
+  const getElementLeft = (elem: any) => {
     let left = 0;
     while (elem) {
       left += elem.offsetLeft;
@@ -214,133 +205,112 @@ export function PopupCard(props: any) {
     return left;
   }
 
-  const showHightlight = (searchResult: { data: { data: object }; image: string, bbox: { x0: number, x1: number, y0: number, y1: number } }[]) => {
+  // 根据搜索结果，在页面上渲染 Hightlight，帮助用户找到搜索结果
+  const showHightlight = (searchResult: { text: string; image: string, bbox: { x0: number, x1: number, y0: number, y1: number } }[]) => {
+
+    // 先移除旧的 Hightlight 信息
+    removeHightlight().then(() => {
+      console.log(searchResult);
+      // let hightlightBox = document.createElement('div')
+      // hightlightBox.classList.add('hightlightBox')
+
+      searchResult.forEach(item => {
+
+        // 图片节点
+        const node = findNode(item.image)
+
+        let box = document.createElement('div')
+        box.style.width = item.bbox.x1 - item.bbox.x0 + 'px'
+        box.style.height = item.bbox.y1 - item.bbox.y0 + 'px'
+        box.style.position = 'absolute'
+        box.style.zIndex = '1'
+        box.style.backgroundColor = 'red'
+        box.style.opacity = '0.5'
+        box.classList.add('hightlightBox')
+
+        if (node) {
+          box.style.top = Math.abs(getElementTop(node) + item.bbox.y0) + 'px'
+          box.style.left = Math.abs(getElementLeft(node) + item.bbox.x0) + 'px'
+
+          console.log('==========');
 
 
-    console.log(searchResult);
+          console.log(box);
+          console.log(Math.abs(getElementTop(node) + item.bbox.y0) + 'px');
 
-    searchResult.forEach(item => {
+          console.log('------');
 
-      // 图片节点
-      const node = findNode(item.image)
+          console.log(node);
+          console.log(getElementTop(node));
+          console.log(item.bbox);
 
 
-      let box = document.createElement('div')
-      box.style.width = item.bbox.x1 - item.bbox.x0 + 'px'
-      box.style.height = item.bbox.y1 - item.bbox.y0 + 'px'
-      box.style.position = 'absolute'
-      box.style.zIndex = '1'
-      box.style.backgroundColor = 'red'
-      box.style.opacity = '0.5'
+          console.log('==========');
 
-      if (node) {
-        box.style.top = Math.abs(getElementTop(node) + item.bbox.y0) + 'px'
-        box.style.left = Math.abs(getElementLeft(node) + item.bbox.x0) + 'px'
+        }
 
-        console.log('==========');
 
+        document.body.appendChild(box)
 
         console.log(box);
-        console.log(Math.abs(getElementTop(node) + item.bbox.y0) + 'px');
 
-        console.log('------');
-
-        console.log(node);
-        console.log(getElementTop(node));
-        console.log(item.bbox);
-
-
-        console.log('==========');
+      });
+    })
 
 
 
-      }
-
-
-      box.classList.add('hightlightBox')
-      document.body.appendChild(box);
-
-
-
-
-
-      console.log(box);
-
-
-
-    });
+    // document.body.appendChild(hightlightBox);
 
   }
 
+  // 移除旧的 Hightlight
   const removeHightlight = () => {
-    let hightlightBox = document.getElementsByClassName('hightlightBox')
-    for(let i=0;i<hightlightBox.length;i++){
-      hightlightBox[i].parentNode?.removeChild(hightlightBox[i])
-    }
-  }
+    return new Promise((resolve, reject) => {
+      let hightlightBox = document.getElementsByClassName('hightlightBox');
+      while (hightlightBox.length > 0) {
+        hightlightBox[0].parentNode?.removeChild(hightlightBox[0]);
+      }
+      resolve('done');
+    });
+  };
 
+  // 搜索
   const onSearch = (value: string) => {
 
+    // 清空旧的搜索结果
     setSearchResult([])
-    // let newSearchResult = []
 
-    // 移除旧的高亮
-    removeHightlight()
-
-    let newSearchResult: { data: { data: object }; image: string, bbox: { x0: number, x1: number, y0: number, y1: number } }[] = []
-
+    let newSearchResult: { text: string; image: string, bbox: { x0: number, x1: number, y0: number, y1: number } }[] = []
 
     console.log(value);
     console.log(ocrResult.current);
     // Search
-    for (let i = 0; i < ocrResult.current[0].length - 1; i++) {
-      const text = ocrResult.current[0][i].data.data.text
-      const image = ocrResult.current[0][i].image
+    for (let i = 0; i < ocrResult.current.length - 1; i++) {
+      const image = ocrResult.current[i].image
 
       // 遍历识别结果的每个段落
-      ocrResult.current[0][i].data.data.lines.forEach((item) => {
+      ocrResult.current[i].lines.forEach((item) => {
         if (item.text.replace(/\s/g, '').indexOf(value) >= 0) {
 
-
-          newSearchResult.unshift({ 'data': ocrResult.current[0][i].data, 'image': image, 'bbox': item.bbox })
-
+          // 返回 text（通常是一整行的文字，图片 URL，这行文字的 bbox）
+          newSearchResult.unshift({ 'text': item.text, 'image': image, 'bbox': item.bbox })
 
         }
       })
 
-      // if (text.indexOf(value) >= 0) {
-      //   console.log('======');
-
-      //   console.log(text);
-      //   console.log(image);
-      //   newSearchResult.unshift({ 'data': ocrResult.current[0][i].data, 'image': image })
-
-      //   console.log('======');
-
-      // }
-
-
     }
+
     setIndex(0)
     setSearchResult(newSearchResult)
-    showHightlight(newSearchResult)
 
-    console.log(newSearchResult);
-
-    // // 定位到 DOM 元素
-    // setTimeout(() => {
-    //   goToImage(searchResult[0])
-    // }, 10);
-
-
+    setTimeout(() => {
+      // 在页面中显示搜索结果
+      showHightlight(newSearchResult)
+    }, 10);
 
   }
 
   const handleNextBtnClick = (offset: number) => {
-    console.log('handleNextBtnClick');
-    console.log(searchResult);
-
-    console.log(offset);
 
     let postion = index + offset
 
@@ -360,23 +330,19 @@ export function PopupCard(props: any) {
 
   }
 
+  // 定位到指定图片
   const goToImage = (target: { image: string, bbox: { x0: number, x1: number, y0: number, y1: number } }) => {
 
     const node = findNode(target.image)
-    console.log(node?.getBoundingClientRect());
-    console.log(target.bbox);
 
-    window.scrollTo(0, getElementTop(node) + target.bbox.y0 - 40)
+    window.scrollTo({ left: 0, top: getElementTop(node) + target.bbox.y0 - 140, behavior: 'smooth' })
+    // node?.scrollIntoView({ behavior: 'smooth' });
+    // window.scrollBy(0, target.bbox.y0 + 100);
 
-    // if (node) {
-    //   node.scrollIntoView({
-    //     behavior: 'smooth', // 平滑滚动
-    //     // inline: 'nearest' // 滚动到离元素最近的边缘
-    //   });
-    // }
 
   }
 
+  // 对图片进行 OCR
   const imageOcr = async (imageUrlList: Array<string>) => {
 
 
@@ -459,6 +425,8 @@ export function PopupCard(props: any) {
 
     let newIamge = []
 
+    let newHistory: any = []
+
     for (const promise of promises) {
       const result = await promise.result;
       // result.data.text = result.data.text.replace(/\s/g, '')
@@ -467,13 +435,17 @@ export function PopupCard(props: any) {
       console.log(result);
 
       const data = {
-        'data': result,
-        'image': promise.image
+        'lines': result,
+        'image': promise.image,
       }
 
       newIamge.push(data)
 
-      ocrResult.current[ocrResult.current.length == 0 ? 0 : ocrResult.current.length - 1] = newIamge
+
+
+      newHistory.push({ 'lines': result.data.lines.map(item => { return { 'bbox': item.bbox, 'text': item.text } }), 'image': promise.image })
+
+      ocrResult.current = newHistory
 
 
     }
@@ -483,56 +455,54 @@ export function PopupCard(props: any) {
 
 
 
-    // const results = await Promise.all(imageUrlList.map((imageUrl) => (
+    // 保存到历史记录中
+    browser.storage.local.get({ "ocrResult": [] }).then((data: any) => {
+      console.log(data);
+      let newOcrResult = [newHistory, ...data.ocrResult]
 
-    //   scheduler.addJob('recognize', imageUrl, undefined, {
-    //     text: true,
-    //     blocks: true,
-    //     hocr: false,
-    //     tsv: false,
-    //     box: false,
-    //     unlv: false,
-    //     osd: false,
-    //     pdf: false,
-    //     imageColor: false,
-    //     imageGrey: false,
-    //     imageBinary: false,
-    //   })
+      console.log(newOcrResult);
 
-    //   // scheduler2.addJob('recognize',imageUrl)
+      newOcrResult.splice(20)
 
-    // )))
+      browser.storage.local.set({ ocrResult: newOcrResult }).then(() => {
+
+        console.log('save');
+
+      })
+
+    })
 
 
-    // console.log(results)
-    // console.log(results.map(r => r.data.text));
-
-    // console.log(results);
     await scheduler.terminate(); // It also terminates all workers.
 
     let date2 = new Date()
 
     console.log(Math.floor((date2.getTime() - date1.getTime()) / 1000));
 
+  }
 
+  // 获取 OCR 历史记录
+  const getOCRHistory = (imageUrlList: Array<string>) => {
 
-    // for (let i = 0; i < imageUrlList.length; i++) {
-    //   const { data: { text } } = await worker.recognize(imageUrlList[i]);
-    //   console.log(text)
-    // }
+    return new Promise((resolve, reject) => {
+      browser.storage.local.get({ "ocrResult": [] }).then((data: any) => {
+        console.log(data.ocrResult);
 
-    // imageUrlList.forEach(async (imageUrl) => {
+        const ocrResult = data.ocrResult
 
-    //   const { data: { text } } = await worker.recognize(imageUrl);
-    //   console.log(text)
+        // 遍历每一条历史记录
+        for (let i = 0; i < ocrResult.length; i++) {
+          const historyImage = ocrResult[i].map((item: { image: string }) => item.image)
+          if (JSON.stringify(imageUrlList) === JSON.stringify(historyImage)) {
+            resolve(ocrResult[i])
+            break
+          }
+        }
 
-    //   // const data = await worker.recognize('https://tesseract.projectnaptha.com/img/eng_bw.png');
-    //   // console.log(data.data.text);
+        resolve(null)
 
-
-    // });
-
-    // await worker.terminate();
+      })
+    })
 
 
   }
@@ -679,8 +649,8 @@ export function PopupCard(props: any) {
           marginTop: '45px'
         }}
       >
-        <Search placeholder="input search text" onSearch={onSearch} style={{ width: 200 }} />
-        {searchResult.length === 0 ? '' : index + 1 + '/' + searchResult.length}
+        <Search placeholder="input search text" onSearch={onSearch} onKeyUp={handleInputOnKeyDown} style={{ width: 200 }} />
+        {searchStatus === 'stanby' ? '' : searchResult.length === 0 ? '0/0' : index + 1 + '/' + searchResult.length}
 
         <button onClick={handleNextBtnClick.bind(event, -1)}>pre</button>
         <button onClick={handleNextBtnClick.bind(event, 1)}>next</button>
