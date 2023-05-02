@@ -14,7 +14,7 @@ browser.runtime.onInstalled.addListener(function () {
 browser.contextMenus.create({
     id: "1",
     title: "Shopping",
-    contexts: ["selection", "page"],
+    contexts: ["selection", "page","image"],
 },
     () => {
         browser.runtime.lastError

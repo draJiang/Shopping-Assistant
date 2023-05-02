@@ -43,11 +43,11 @@ export function PopupCard(props: any) {
       const maxX = windowWidth - elementWidth;
       const maxY = windowHeight - elementHeight;
 
-      const newX = maxX - 20
-      const newY = props.selection.anchorNode.parentElement.offsetTop + props.selection.anchorNode.parentElement.clientHeight + 20
+      // const newX = maxX - 20
+      // const newY = props.selection.anchorNode.parentElement.offsetTop + props.selection.anchorNode.parentElement.clientHeight + 20
 
-      const clampedX = Math.max(minX, Math.min(newX, maxX));
-      const clampedY = Math.max(minY, Math.min(newY, maxY));
+      // const clampedX = Math.max(minX, Math.min(newX, maxX));
+      // const clampedY = Math.max(minY, Math.min(newY, maxY));
       // console.log(props.selection.getRangeAt(0));
 
       windowElement.current.style.right = '10px';
@@ -60,43 +60,32 @@ export function PopupCard(props: any) {
     const y = window.scrollY; // 或者使用 window.pageYOffset
 
     // 滚动到页面底部以让图片加载出来
-    window.scrollTo(0, document.body.scrollHeight / 2);
+    window.scrollTo(0, document.body.scrollHeight / 3);
 
     // 回到滚动前的位置
     setTimeout(() => {
-      window.scrollTo(0, y);
+
+      window.scrollTo(0, document.body.scrollHeight / 2);
+
+      setTimeout(() => {
+
+        window.scrollTo(0, document.body.scrollHeight / 1.5);
+
+      }, 1000);
+
+      setTimeout(() => {
+
+        window.scrollTo(0, y);
+
+      }, 2000);
+
     }, 2000);
 
 
 
     // 获取页面上需要 OCR 的图片
-    let imageNode = document.getElementById('J-detail-content')?.getElementsByTagName('img')
-    let imageList = new Array()
-    if (imageNode !== undefined) {
-
-      console.log(imageNode);
-
-      for (let i = imageNode?.length - 1; i > -1; i--) {
-        let url: string = imageNode[i]['currentSrc'].replace('.avif', '')
-
-        if (imageNode[i]['currentSrc'].indexOf('.gif') < 0) {
-
-        } else {
-          let linkHeard = ''
-          let lazyload = imageNode[i].getAttribute('data-lazyload')
-          if (lazyload) {
-            if (lazyload.indexOf('http') < 0) {
-              linkHeard = 'https:'
-            }
-          }
-
-          url = linkHeard + imageNode[i].getAttribute('data-lazyload')?.replace('.avif', '')
-
-        }
-
-        imageList.push(url)
-
-      }
+    let imageList = getProductImage()
+    if (imageList.length >= 0) {
 
       // 获取 OCR 结果的历史记录
       getOCRHistory(imageList).then((data: any) => {
@@ -140,6 +129,60 @@ export function PopupCard(props: any) {
 
   }, [searchResult]);
 
+  const getProductImage = () => {
+
+    // 获取页面上需要 OCR 的图片
+    let imageNode = document.getElementById('J-detail-content')?.getElementsByTagName('img')
+    let imageList = new Array()
+    if (imageNode !== undefined) {
+
+      for (let i = imageNode?.length - 1; i > -1; i--) {
+        let url: string = imageNode[i]['currentSrc'].replace('.avif', '')
+
+        if (imageNode[i]['currentSrc'].indexOf('.gif') < 0) {
+
+        } else {
+          let linkHeard = ''
+          let lazyload = imageNode[i].getAttribute('data-lazyload')
+          if (lazyload) {
+            if (lazyload.indexOf('http') < 0) {
+              linkHeard = 'https:'
+            }
+          }
+
+          url = linkHeard + imageNode[i].getAttribute('data-lazyload')?.replace('.avif', '')
+
+        }
+
+        imageList.push(url)
+
+      }
+
+      if (imageList.length === 0) {
+        const content = document.getElementById('J-detail-content')
+        const imageDOMList = content?.getElementsByClassName('ssd-module')
+        if (imageDOMList !== undefined) {
+          for (let j = 0; j < imageDOMList.length; j++) {
+
+            const element = imageDOMList[j]
+            const styles = window.getComputedStyle(element);
+            let backgroundImage = styles.getPropertyValue('background-image');
+            backgroundImage = backgroundImage.replace('url("', '').replace('.avif', '').replace('")', '')
+            imageList.push(backgroundImage)
+
+          }
+        }
+
+
+
+      }
+
+    }
+
+    return imageList
+
+  }
+
   // 二值化函数
   function binarizeImage(imageData: any, threshold: any) {
     for (let i = 0; i < imageData.data.length; i += 4) {
@@ -162,7 +205,7 @@ export function PopupCard(props: any) {
   // 通过图片的 URL 获取对应的图片 DOM 链接
   const findNode = (imageUrl: string) => {
     const imageNode = document.getElementById('J-detail-content')?.getElementsByTagName('img')
-    if (imageNode !== undefined) {
+    if (imageNode !== undefined && imageNode.length > 0) {
       for (let i = 0; i < imageNode.length; i++) {
 
         let thisUrl = imageNode[i].currentSrc
@@ -180,9 +223,33 @@ export function PopupCard(props: any) {
 
       }
 
-      return null
+
+
+    } else {
+      // 图片是放置在 div 的 background-image 属性中
+      const content = document.getElementById('J-detail-content')
+      const imageDOMList = content?.getElementsByClassName('ssd-module')
+      if (imageDOMList !== undefined) {
+        for (let j = 0; j < imageDOMList.length; j++) {
+
+          const element = imageDOMList[j]
+          const styles = window.getComputedStyle(element);
+          let backgroundImage = styles.getPropertyValue('background-image');
+          backgroundImage = backgroundImage.replace('url("', '').replace('.avif', '').replace('")', '')
+
+          if (backgroundImage.indexOf(imageUrl) >= 0) {
+
+            return element
+
+          }
+
+        }
+      }
 
     }
+
+    return null
+
   }
 
   // 获取指定 DOM 元素在整个页面中的 Y 坐标
@@ -456,21 +523,28 @@ export function PopupCard(props: any) {
 
 
     // 保存到历史记录中
-    browser.storage.local.get({ "ocrResult": [] }).then((data: any) => {
-      console.log(data);
-      let newOcrResult = [newHistory, ...data.ocrResult]
 
-      console.log(newOcrResult);
+    // 如果已有此记录则不用重复保存
+    getOCRHistory(imageUrlList).then((data) => {
+      if (!data) {
+        browser.storage.local.get({ "ocrResult": [] }).then((data: any) => {
+          console.log(data);
+          let newOcrResult = [newHistory, ...data.ocrResult]
 
-      newOcrResult.splice(20)
+          console.log(newOcrResult);
 
-      browser.storage.local.set({ ocrResult: newOcrResult }).then(() => {
+          newOcrResult.splice(20)
 
-        console.log('save');
+          browser.storage.local.set({ ocrResult: newOcrResult }).then(() => {
 
-      })
+            console.log('save');
 
+          })
+
+        })
+      }
     })
+
 
 
     await scheduler.terminate(); // It also terminates all workers.
