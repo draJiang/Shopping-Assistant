@@ -1,7 +1,9 @@
 import browser from 'webextension-polyfill'
 import Tesseract from 'tesseract.js';
 import { createWorker, createScheduler } from 'tesseract.js';
-import { Input, Space } from 'antd';
+import { Input, Space, Progress } from 'antd';
+import { StatusBar } from './StatusBar'
+
 
 const { Search } = Input;
 
@@ -25,6 +27,9 @@ export function PopupCard(props: any) {
   const [index, setIndex] = useState<number>(0)
 
   const [searchStatus, setSearchStatus] = useState('stanby')
+
+  const [ocrPercent, setOcrPercent] = useState<number>(0);
+
 
   useEffect(() => {
 
@@ -92,6 +97,7 @@ export function PopupCard(props: any) {
         if (data) {
           // 当前页面中的图片的 OCR 结果在本地记录中找到了，则直接用历史记录的数据
           ocrResult.current = data
+          setOcrPercent(1)
 
         } else {
           // OCR 图片
@@ -136,7 +142,7 @@ export function PopupCard(props: any) {
     let imageList = new Array()
     if (imageNode !== undefined) {
 
-      for (let i = imageNode?.length - 1; i > -1; i--) {
+      for (let i = 0; i < imageNode?.length; i++) {
         let url: string = imageNode[i]['currentSrc'].replace('.avif', '')
 
         if (imageNode[i]['currentSrc'].indexOf('.gif') < 0) {
@@ -506,11 +512,12 @@ export function PopupCard(props: any) {
         'image': promise.image,
       }
 
-      newIamge.push(data)
-
-
+      // newIamge.push(data)
+      
 
       newHistory.push({ 'lines': result.data.lines.map(item => { return { 'bbox': item.bbox, 'text': item.text } }), 'image': promise.image })
+
+      setOcrPercent(newHistory.length / imageUrlList.length)
 
       ocrResult.current = newHistory
 
@@ -730,7 +737,7 @@ export function PopupCard(props: any) {
         <button onClick={handleNextBtnClick.bind(event, 1)}>next</button>
 
       </div>
-
+      <StatusBar ocrPercent={ocrPercent} />
     </div>
 
   );
