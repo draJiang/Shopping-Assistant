@@ -1,6 +1,10 @@
-import browser from 'webextension-polyfill'
+import browser, { events } from 'webextension-polyfill'
 import Tesseract from 'tesseract.js';
 import { createWorker, createScheduler } from 'tesseract.js';
+import { closeContainer } from '../index'
+
+import * as Tabs from '@radix-ui/react-tabs';
+
 import { Input, Space, Progress } from 'antd';
 import { StatusBar } from './StatusBar'
 
@@ -11,6 +15,15 @@ const { Search } = Input;
 import React, { useEffect, useState, useRef, useContext } from "react";
 
 import { Nav } from "../../Components/Nav"
+
+
+import { styled } from '@stitches/react';
+
+const StyledItem = styled(Tabs.Root, {
+  borderBottom: '1px solid gainsboro',
+  color: 'red'
+});
+
 
 export function PopupCard(props: any) {
 
@@ -28,10 +41,23 @@ export function PopupCard(props: any) {
 
   const [searchStatus, setSearchStatus] = useState('stanby')
 
-  const [ocrPercent, setOcrPercent] = useState<number>(0);
+  const [ocrPercent, setOcrPercent] = useState<{ count: number, progress: number }>();
+
+  // 搜索框
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const timeIdRef = useRef<NodeJS.Timeout>();
+
+  // const inputValue = useRef<string>('');
+  const [inputValue, setInputValue] = useState<string>('')
 
 
   useEffect(() => {
+
+    if (inputRef.current !== null) {
+      inputRef.current.focus();
+    }
+
 
     // 设置窗口的默认位置
     if (windowElement.current) {
@@ -55,8 +81,8 @@ export function PopupCard(props: any) {
       // const clampedY = Math.max(minY, Math.min(newY, maxY));
       // console.log(props.selection.getRangeAt(0));
 
-      windowElement.current.style.right = '10px';
-      windowElement.current.style.top = '10px';
+      windowElement.current.style.right = '20px';
+      windowElement.current.style.top = '20px';
     }
 
     console.log('chulitupian==========');
@@ -67,7 +93,7 @@ export function PopupCard(props: any) {
     // 滚动到页面底部以让图片加载出来
     window.scrollTo(0, document.body.scrollHeight / 3);
 
-    // 回到滚动前的位置
+
     setTimeout(() => {
 
       window.scrollTo(0, document.body.scrollHeight / 2);
@@ -80,6 +106,7 @@ export function PopupCard(props: any) {
 
       setTimeout(() => {
 
+        // 回到滚动前的位置
         window.scrollTo(0, y);
 
       }, 2000);
@@ -97,11 +124,12 @@ export function PopupCard(props: any) {
         if (data) {
           // 当前页面中的图片的 OCR 结果在本地记录中找到了，则直接用历史记录的数据
           ocrResult.current = data
-          setOcrPercent(1)
+          setOcrPercent({ count: imageList.length, progress: imageList.length })
 
         } else {
           // OCR 图片
           imageOcr(imageList)
+
         }
       })
 
@@ -123,10 +151,10 @@ export function PopupCard(props: any) {
     };
   }, [dragging]);
 
+
+
   // 搜索完毕后触发
   useEffect(() => {
-
-    setSearchStatus('end')
 
     // 搜索完毕后，定位到第一个搜索结果
     if (searchResult.length > 0) {
@@ -134,6 +162,7 @@ export function PopupCard(props: any) {
     }
 
   }, [searchResult]);
+
 
   const getProductImage = () => {
 
@@ -203,7 +232,22 @@ export function PopupCard(props: any) {
 
   const handleInputOnKeyDown = (event: any) => {
     console.log('handleInputOnKeyDown');
+    console.log(event);
 
+    if (event.keyCode === 13) {
+      handleNextBtnClick(1)
+    }
+
+    if (event.keyCode === 13 && event.shiftKey) {
+      handleNextBtnClick(-1)
+    }
+
+    if (event.keyCode === 27) {
+      // 关闭窗口
+      closeContainer()
+    }
+    // 缓存 input 的值
+    // inputValue.current = event.target.value
     // event.preventDefault()
     event.stopPropagation()
   }
@@ -347,8 +391,20 @@ export function PopupCard(props: any) {
     });
   };
 
+
   // 搜索
   const onSearch = (value: string) => {
+
+    // const value = e.target.value
+
+    if (value === '') {
+      return
+    }
+
+    // 停止输入 500ms 后执行搜索
+
+
+
 
     // 清空旧的搜索结果
     setSearchResult([])
@@ -366,7 +422,7 @@ export function PopupCard(props: any) {
         if (item.text.replace(/\s/g, '').indexOf(value) >= 0) {
 
           // 返回 text（通常是一整行的文字，图片 URL，这行文字的 bbox）
-          newSearchResult.unshift({ 'text': item.text, 'image': image, 'bbox': item.bbox })
+          newSearchResult.push({ 'text': item.text, 'image': image, 'bbox': item.bbox })
 
         }
       })
@@ -375,11 +431,15 @@ export function PopupCard(props: any) {
 
     setIndex(0)
     setSearchResult(newSearchResult)
+    setSearchStatus('end')
 
     setTimeout(() => {
       // 在页面中显示搜索结果
       showHightlight(newSearchResult)
     }, 10);
+
+
+
 
   }
 
@@ -418,6 +478,8 @@ export function PopupCard(props: any) {
   // 对图片进行 OCR
   const imageOcr = async (imageUrlList: Array<string>) => {
 
+    // 显示 OCR 进度
+    setOcrPercent({ count: imageUrlList.length, progress: 0 })
 
     // Tesseract.recognize(
     //   imageUrl,
@@ -513,11 +575,11 @@ export function PopupCard(props: any) {
       }
 
       // newIamge.push(data)
-      
+
 
       newHistory.push({ 'lines': result.data.lines.map(item => { return { 'bbox': item.bbox, 'text': item.text } }), 'image': promise.image })
 
-      setOcrPercent(newHistory.length / imageUrlList.length)
+      setOcrPercent({ count: imageUrlList.length, progress: newHistory.length })
 
       ocrResult.current = newHistory
 
@@ -719,25 +781,149 @@ export function PopupCard(props: any) {
     setDragging(false);
   };
 
+  const handleCloseBtnClick = () => {
+    const container = document.getElementsByClassName('container')[0]
+    container.parentNode?.removeChild(container);
+  }
+
+  const onTabsValueChange = () => {
+
+    console.log('onTabsValueChange');
+
+  }
+
+  const hanleInputChange = (event: any) => {
+    setInputValue(event?.target.value)
+
+    clearTimeout(timeIdRef.current)
+
+    timeIdRef.current = setTimeout(() => {
+      onSearch(event?.target.value)
+    }, 500);
+
+
+  }
+
 
   return (
     <div id="LearningEnglish2023" ref={windowElement}>
 
-      <Nav onMouseDown={handleMouseDown} />
-      <div
-        className='contentBox'
+      {/* <Nav onMouseDown={handleMouseDown} /> */}
+
+
+      <Tabs.Root defaultValue="search"
         style={{
-          marginTop: '45px'
+          backgroundColor: '#ffffff',
+          boxShadow: '2px 4px 16px rgba(0, 0, 0, 0.1), -1px 10px 10px rgba(0, 0, 0, 0.06)',
+          borderRadius: '8px'
         }}
+        onValueChange={onTabsValueChange}
       >
-        <Search placeholder="input search text" onSearch={onSearch} onKeyUp={handleInputOnKeyDown} style={{ width: 200 }} />
-        {searchStatus === 'stanby' ? '' : searchResult.length === 0 ? '0/0' : index + 1 + '/' + searchResult.length}
 
-        <button onClick={handleNextBtnClick.bind(event, -1)}>pre</button>
-        <button onClick={handleNextBtnClick.bind(event, 1)}>next</button>
+        <Tabs.List className="TabsList" aria-label="Manage your account">
+          <Tabs.Trigger className="TabsTrigger" value="search">
+            <svg width="16" height="16" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 6.5C10 8.433 8.433 10 6.5 10C4.567 10 3 8.433 3 6.5C3 4.567 4.567 3 6.5 3C8.433 3 10 4.567 10 6.5ZM9.30884 10.0159C8.53901 10.6318 7.56251 11 6.5 11C4.01472 11 2 8.98528 2 6.5C2 4.01472 4.01472 2 6.5 2C8.98528 2 11 4.01472 11 6.5C11 7.56251 10.6318 8.53901 10.0159 9.30884L12.8536 12.1464C13.0488 12.3417 13.0488 12.6583 12.8536 12.8536C12.6583 13.0488 12.3417 13.0488 12.1464 12.8536L9.30884 10.0159Z" fill="currentColor" fillRule="evenodd" clipRule="evenodd"></path></svg>
+            Find
+          </Tabs.Trigger>
+          <Tabs.Trigger className="TabsTrigger" value="chat">
+            <svg width="14" height="14" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12.5 3L2.5 3.00002C1.67157 3.00002 1 3.6716 1 4.50002V9.50003C1 10.3285 1.67157 11 2.5 11H7.50003C7.63264 11 7.75982 11.0527 7.85358 11.1465L10 13.2929V11.5C10 11.2239 10.2239 11 10.5 11H12.5C13.3284 11 14 10.3285 14 9.50003V4.5C14 3.67157 13.3284 3 12.5 3ZM2.49999 2.00002L12.5 2C13.8807 2 15 3.11929 15 4.5V9.50003C15 10.8807 13.8807 12 12.5 12H11V14.5C11 14.7022 10.8782 14.8845 10.6913 14.9619C10.5045 15.0393 10.2894 14.9965 10.1464 14.8536L7.29292 12H2.5C1.11929 12 0 10.8807 0 9.50003V4.50002C0 3.11931 1.11928 2.00003 2.49999 2.00002Z" fill="currentColor" fillRule="evenodd" clipRule="evenodd"></path></svg>
+            Chat
+          </Tabs.Trigger>
 
-      </div>
+          <div
+            className='closeBtn'
+            style={{
+              flexBasis: '50%',
+              display: 'flex',
+              justifyContent: 'end'
+            }}
+          >
+            <a
+              onClick={closeContainer}
+            ><svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12.8536 2.85355C13.0488 2.65829 13.0488 2.34171 12.8536 2.14645C12.6583 1.95118 12.3417 1.95118 12.1464 2.14645L7.5 6.79289L2.85355 2.14645C2.65829 1.95118 2.34171 1.95118 2.14645 2.14645C1.95118 2.34171 1.95118 2.65829 2.14645 2.85355L6.79289 7.5L2.14645 12.1464C1.95118 12.3417 1.95118 12.6583 2.14645 12.8536C2.34171 13.0488 2.65829 13.0488 2.85355 12.8536L7.5 8.20711L12.1464 12.8536C12.3417 13.0488 12.6583 13.0488 12.8536 12.8536C13.0488 12.6583 13.0488 12.3417 12.8536 12.1464L8.20711 7.5L12.8536 2.85355Z" fill="currentColor" fillRule="evenodd" clipRule="evenodd"></path></svg></a>
+          </div>
+
+        </Tabs.List>
+
+        <Tabs.Content className="TabsContent" value="search">
+
+          <div
+            className='SearchBox'
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              border: '1px solid #E0E2E4',
+              borderRadius: '4px'
+            }}
+          >
+
+
+            <div className='SearchInputBox'
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                flex: '1'
+              }}
+            >
+              <input
+                value={inputValue}
+                ref={inputRef}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  height: '30px',
+                  flex: '1',
+                  padding: '4px 0 4px 10px'
+                }}
+                placeholder="input search text" onChange={hanleInputChange} onKeyUp={handleInputOnKeyDown} />
+
+              <div className='SearchResult'
+                style={{ color: '#999' }}
+              >
+                {searchStatus === 'stanby' ? '' : searchResult.length === 0 ? '0/0' : index + 1 + '/' + searchResult.length}
+              </div>
+
+              <div
+                style={{
+                  borderRight: '1.4px solid #E0E2E4',
+                  height: '20px',
+                  paddingLeft: '14px'
+                }}
+                className='border'></div>
+
+            </div>
+
+            {/* <Search placeholder="input search text" onSearch={onSearch} onKeyUp={handleInputOnKeyDown} style={{ width: 200 }} /> */}
+
+
+
+            <div className='RightBtnBox'
+              style={{
+                display: 'flex',
+                padding: '4px'
+              }}
+            >
+              <a style={{ paddingBottom: '4px' }} onClick={handleNextBtnClick.bind(event, -1)}><svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3.13523 8.84197C3.3241 9.04343 3.64052 9.05363 3.84197 8.86477L7.5 5.43536L11.158 8.86477C11.3595 9.05363 11.6759 9.04343 11.8648 8.84197C12.0536 8.64051 12.0434 8.32409 11.842 8.13523L7.84197 4.38523C7.64964 4.20492 7.35036 4.20492 7.15803 4.38523L3.15803 8.13523C2.95657 8.32409 2.94637 8.64051 3.13523 8.84197Z" fill="currentColor" fill-rule="evenodd" clip-rule="evenodd"></path></svg></a>
+              <a onClick={handleNextBtnClick.bind(event, 1)}><svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3.13523 6.15803C3.3241 5.95657 3.64052 5.94637 3.84197 6.13523L7.5 9.56464L11.158 6.13523C11.3595 5.94637 11.6759 5.95657 11.8648 6.15803C12.0536 6.35949 12.0434 6.67591 11.842 6.86477L7.84197 10.6148C7.64964 10.7951 7.35036 10.7951 7.15803 10.6148L3.15803 6.86477C2.95657 6.67591 2.94637 6.35949 3.13523 6.15803Z" fill="currentColor" fill-rule="evenodd" clip-rule="evenodd"></path></svg></a>
+
+              {/* <button onClick={handleNextBtnClick.bind(event, -1)}>pre</button>
+              <button onClick={handleNextBtnClick.bind(event, 1)}>next</button> */}
+
+            </div>
+
+
+          </div>
+
+
+        </Tabs.Content>
+        <Tabs.Content className="TabsContent" value="chat">
+          Coming soon...
+        </Tabs.Content>
+      </Tabs.Root>
+
       <StatusBar ocrPercent={ocrPercent} />
+
+
     </div>
 
   );
